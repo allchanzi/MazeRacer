@@ -3,5 +3,5 @@ function grad2rad(grad){
 }
 
 function getRandomIndex(arr){
-    return Math.floor(Math.random() * myArray.length);
+    return Math.floor(Math.random() * arr.length);
 }

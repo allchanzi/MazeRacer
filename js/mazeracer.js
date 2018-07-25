@@ -11,10 +11,13 @@ const stage = new PIXI.Container();
 //Graphic object
 
 //Maze variables
-const cellSize = 80;
+const cellSize = 40;
 const cols  = Math.floor(renderer.height / cellSize);
 const rows = Math.floor(renderer.width / cellSize);
-const grid = [];
+
+const grid = new Grid(rows, cols);
+const toFromMapping = new Map([['N', 'S'], ['S', 'N'], ['W', 'E'], ['E', 'W']]);
+
 
 setup();
 
@@ -42,112 +45,161 @@ function drawRectangle(startX, startY, length){
     stage.addChild(graphics);
 }
 
-function drawGrid(){
-    for(let i = 0; i < grid.length; i++){
-        grid[i].drawWalls();
-    }
-}
+function RecursiveBacktracker(grid){
+    this.grid = grid;
+    this.visitedStack = [];
+    this.currentCell = this.grid.getCell(0, 0);
 
-function getIndex(i, j){
-    return j + i * cols;
-}
-
-function RecursiveBacktracker(){
-    this.current = grid[0];
-    this.current.visited = true;
-
-    this.getRandomOrientation = function (cell) {
-        switch (cell){
-            case (cell.row === 0) :
-        }
+    this.possibleLocations = () => {
+        let possibilities = [];
+        this.currentCell.neighbors.forEach((value, key) => {
+            if (value) {
+                    possibilities.push(key);
+            }
+        });
+        return possibilities
     };
 
-    this.visitRandomNeighbor = function (cell) {
+    this.addToVisited = () => this.visitedStack.push(this.currentCell);
 
-    };
+    this.getLastVisited = () => this.visitedStack.pop();
 
-    this.start = function () {
-        const randOrientation = this.directions[getRandomIndex(this.directions)];
-        this.next = this.current.visitNeighbor(randOrientation);
+    this.getRandomNeighbor = () => this.possibleLocations()[getRandomIndex(this.possibleLocations())];
 
-    };
-
-
-}
-
-function Cell(row,col){
-    const self = this;
-    this.row = row;
-    this.col = col;
-    this.walls = new Map([['N', true], ['S', true], ['W', true], ['E', true]]);
-    this.neighbors = new Map([['N', true], ['S', true], ['W', true], ['E', true]]);
-    this.visited = false;
-
-    this.initNeighbor = function() {
-        this.row === 0 ? this.neighbors.set('N', false)
-            : this.col ===0 ? this.neighbors.set('W', false)
-            : this.row === rows ? this.neighbors.set('S', false)
-            : this.col === cols ? this.neighbors.set('E', false)
-            : void(0);
-    };
-
-    this.drawWalls = function() {
-        this.walls.forEach(function (value, key){
-            (value !== true) ? void(0)
-                : (key === 'N' ) ? drawLine(self.row * cellSize, self.col * cellSize, cellSize, 90)
-                : (key === "S") ? drawLine(self.row * cellSize, self.col * cellSize + cellSize, cellSize, 90)
-                : (key === "E") ? drawLine(self.row * cellSize + cellSize, self.col * cellSize, cellSize, 180)
-                : drawLine(self.row * cellSize, self.col * cellSize, cellSize, 0);
+    this.updateNeighbors = () => {
+        this.currentCell.neighbors.forEach((value, key) => {
+            if (value) {
+                if (this.grid.getCellId(value).visited){
+                    this.currentCell.neighbors.set(key, false);
+                }
+            }
         });
     };
 
-    this.checkNeighbors = function () {
-        let condition = false;
-        let iterator = this.neighbors.values();
-        while (!condition && condition !== undefined) {
-            condition = iterator.next().value;
+    this.visitNeighbor = (location) => {
+        let neighbor = this.grid.getCellId(this.currentCell.neighbors.get(location));
+        this.grid.removeWall(this.currentCell, location);
+        this.currentCell = neighbor;
+    };
+
+    this.start = () => {
+        this.currentCell.visited = true;
+        this.updateNeighbors();
+        if (this.currentCell.hasUnvisitedNeightbor()) {
+            let rndLoc = this.getRandomNeighbor();
+            this.visitNeighbor(rndLoc);
+            this.addToVisited();
+            this.start();
+        } else {
+            this.currentCell = this.getLastVisited();
+            if (this.currentCell !== undefined){
+                this.start();
+            }
         }
-        return condition === undefined ? false : condition
-    };
-
-    this.drawCurrentCell = function() {
-        drawRectangle(row * cellSize, col * cellSize,cellSize);
-    };
-
-    this.randomNeighbor = function () {
 
     };
+}
 
-    this.visitNeighbor = function (orientation) {
-        if (this.neighbors.get(orientation) === true) {
-            this.neighbors.set(orientation, false);
-            this.walls.set(orientation, false);
-            switch (orientation){
-                case 'N': return getIndex(row - 1, col);
-                case 'S': return getIndex(row + 1, col);
-                case 'W': return getIndex(row, col + 1);
-                case 'E': return getIndex(row, col - 1);
+function Grid(rows, cols) {
+    this.rows = rows;
+    this.cols = cols;
+    this.grid = [];
+
+    this.initNeighbors = (cell) => {
+        cell.neighbors = new Map([['N', this.getIndex(cell.row - 1, cell.col)],
+                                  ['S', this.getIndex(cell.row + 1, cell.col)],
+                                  ['W', this.getIndex(cell.row,     cell.col - 1)],
+                                  ['E', this.getIndex(cell.row,     cell.col + 1)]]);
+    };
+
+    this.initGrid = () => {
+        for(let i = 0; i < this.rows; i++){
+            for(let j = 0; j < this.cols; j++){
+                let cell = new Cell(i,j, cellSize);
+                this.initNeighbors(cell);
+                this.grid.push(cell)
             }
         }
     };
 
-    this.initNeighbor();
-}
-
-function initGrid(){
-    for(let i = 0; i < rows; i++){
-        for(j = 0; j < cols; j++){
-            let cell = new Cell(i,j);
-            grid.push(cell)
+    this.drawGrid = () => {
+        for(let i = 0; i < this.grid.length; i++){
+            this.grid[i].drawWalls();
+            //this.grid[i].printNeighbors();
         }
-    }
+    };
+
+    this.removeWall = (cell, orientation) => {
+        cell.walls.set(orientation, false);
+        let neighbor = cell.neighbors.get(orientation);
+        neighbor ? this.grid[neighbor].walls.set(toFromMapping.get(orientation), false) : false;
+    };
+
+    this.getIndex = (i, j) => (i < 0 || i >= this.rows || j < 0 || j >= this.cols) ? false : j + i * this.cols;
+
+    this.getCell = (i, j) => this.grid[this.getIndex(i, j)];
+
+    this.getCellId = (id) => this.grid[id];
+
+
+    this.initGrid();
 }
 
-function setup(){
-    initGrid();
-    console.log(grid[0].checkNeighbors());
-    //grid[0].checkNeighbors();
-    //drawGrid();
-    //drawRectangle(0,0,cellSize);
+function Cell(row,col, cellSize){
+    this.row = row;
+    this.col = col;
+    this.cellSize = cellSize;
+    this.walls = new Map([['N', true], ['S', true], ['W', true], ['E', true]]);
+    this.neighbors = null;
+    this.visited = false;
+
+    this.hasUnvisitedNeightbor = () => {
+        let hasNeighbor = false;
+        for (let [key, value] of this.neighbors){
+            if (value){
+                hasNeighbor = true;
+            }
+        }
+        return hasNeighbor
+    };
+
+    this.drawWalls = () => {
+        this.walls.forEach((value, key) => {
+            if (value) {
+                switch (key) {
+                    case ('N') :
+                        drawLine(this.col * this.cellSize, this.row * this.cellSize, this.cellSize, 90);
+                        break;
+                    case ('S') :
+                        drawLine(this.col * this.cellSize, this.row * this.cellSize + this.cellSize, this.cellSize, 90);
+                        break;
+                    case ('E') :
+                        drawLine(this.col * this.cellSize + this.cellSize, this.row * this.cellSize, this.cellSize, 180);
+                        break;
+                    case ('W') :
+                        drawLine(this.col * this.cellSize, this.row * this.cellSize, this.cellSize, 180);
+                        break;
+                }
+            }
+        });
+    };
+
+    this.drawCurrentCell = () => {
+        drawRectangle(this.row * this.cellSize, this.col * this.cellSize, this.cellSize);
+        this.drawWalls();
+    };
+
+    this.printNeighbors = () => {
+        this.neighbors.forEach((value, key) => {
+            console.log(this.row, this.col, key, value);
+        })
+    };
+    }
+
+function setup() {
+    alg = new RecursiveBacktracker(grid);
+    alg.start();
+    grid.drawGrid();
     renderer.render(stage);
-}
+};
+
